@@ -194,7 +194,7 @@ __do_fork (void *aux) {
 		bool found = false;
 		if (!found){
 			struct file *new_file;
-			if (file > 2)
+			if (file > 3)
 				new_file = file_duplicate(file);
 			else
 				new_file = file;
@@ -266,11 +266,12 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	if (child_tid == -1){
+	struct thread *child = get_child_by_tid(child_tid);
+	
+	if (child_tid == -1 || child == -1){
 		return -1;
 	}
 
-	struct thread *child = get_child_by_tid(child_tid);
 	sema_down(&child->wait_sema);
 
 	int exit_status = child->exit_status;
@@ -295,6 +296,15 @@ process_exit (void) {
 	// strtok_r(fn_copy, " ",&save_ptr);
 	// printf("%s: exit(%d)\n",fn_copy,curr->exit_status);
 #endif
+
+	for (int i = 0; i < FDCOUNT_LIMIT; i++)
+	{
+		close(i);
+	}
+
+	palloc_free_multiple(curr->fd_table, FDT_PAGES); 
+	file_close(curr->running);
+
 	process_cleanup ();
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->free_sema);
@@ -436,6 +446,9 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	file_deny_write(file);
+	t->running = file;
+
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
@@ -545,7 +558,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	// file_close (file);
 	return success;
 }
 

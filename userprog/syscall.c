@@ -86,8 +86,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = fork(f->R.rdi, f);
 			break;
 		case SYS_EXEC:
-			if (exec(f->R.rdi) == -1)
+			f->R.rax = exec(f->R.rdi);
+			if (f->R.rax == -1)
 				exit(-1);
+			break;
+		case SYS_WAIT:
+			f->R.rax = process_wait(f->R.rdi);
 			break;
 		case SYS_CREATE:
 			f->R.rax = create(f->R.rdi, f->R.rsi);
@@ -97,8 +101,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case SYS_OPEN:
 			f->R.rax = open(f->R.rdi);
-			if (f->R.rax == -1)
-				exit(-1);
+			// if (f->R.rax == -1)
+			// 	exit(-1);
 			break;
 		case SYS_FILESIZE:
 			f->R.rax = filesize(f->R.rdi);
@@ -248,7 +252,7 @@ filesize (int fd) {
 int
 read (int fd, void *buffer, unsigned size) {
 
-	if (fd == 2) {
+	if (fd == 2 || fd == 1) {
 		return -1;
 	}
 
@@ -298,7 +302,7 @@ read (int fd, void *buffer, unsigned size) {
 int
 write (int fd, const void *buffer, unsigned size) {
 
-	if (fd == 2) {
+	if (fd == 2 || fd == 0) {
 		return -1;
 	}
 

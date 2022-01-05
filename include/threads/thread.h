@@ -119,6 +119,7 @@ struct thread {
 	struct file **fd_table;   /* allocated in thread_create */	
 	struct semaphore wait_sema; /* parent thread should wait for child's exit */
 	struct semaphore free_sema; /* child thread should wait for parent's finish wait */
+	struct file *running;
 	/* ------------------------------- */
 	
 #ifdef USERPROG
