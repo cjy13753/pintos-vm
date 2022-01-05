@@ -244,7 +244,7 @@ process_exec (void *f_name) {
 	if (!success)
 		return -1;
 
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 
 	/* Start switched process. */
 	do_iret (&_if);
@@ -266,13 +266,18 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	// while(1){};
-
-	for (int i=0; i < 1000000000; i++){
-
+	if (child_tid == -1){
+		return -1;
 	}
 
-	return -1;
+	struct thread *child = get_child_by_tid(child_tid);
+	sema_down(&child->wait_sema);
+
+	int exit_status = child->exit_status;
+	list_remove(&child->child_elem);
+	sema_up(&child->free_sema);
+
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -283,8 +288,17 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+#ifdef USERPROG
+	// char *save_ptr;
+	// char fn_copy[48];
+	// memcpy(&fn_copy, curr->name, strlen(curr->name) + 1);
+	// strtok_r(fn_copy, " ",&save_ptr);
+	// printf("%s: exit(%d)\n",fn_copy,curr->exit_status);
+#endif
 	process_cleanup ();
+	sema_up(&curr->wait_sema);
+	sema_down(&curr->free_sema);
+
 }
 
 /* Free the current process's resources. */

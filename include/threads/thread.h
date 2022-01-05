@@ -117,6 +117,8 @@ struct thread {
 	struct list_elem child_elem; /* elem for this thread's parent's child_list */
 	struct semaphore fork_sema; /* parent thread should wait while child thread copy parent */
 	struct file **fd_table;   /* allocated in thread_create */	
+	struct semaphore wait_sema; /* parent thread should wait for child's exit */
+	struct semaphore free_sema; /* child thread should wait for parent's finish wait */
 	/* ------------------------------- */
 	
 #ifdef USERPROG

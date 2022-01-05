@@ -218,6 +218,15 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	struct  thread *parent = thread_current();
 	list_push_back(&parent->child_list, &t->child_elem);
+	t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	if (t->fd_table == NULL)
+		return TID_ERROR;
+	t->fd_idx = 3; // 0 : stdin, 1 : stdout, 2 : sterror
+	// 2-extra
+	t->fd_table[0] = 1; // dummy values to distinguish fd 0 and 1 from NULL
+	t->fd_table[1] = 2;
+	t->fd_table[2] = 3;
+
 	tid = t->tid = allocate_tid ();
 
 	/* Call the kernel_thread if it scheduled.
@@ -461,6 +470,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->exit_status = 0;
 	list_init(&t->child_list);
 	sema_init(&t->fork_sema, 0);
+	sema_init(&t->wait_sema, 0);
+	sema_init(&t->free_sema, 0);
 	/* ------------------------------ */
 }
 
