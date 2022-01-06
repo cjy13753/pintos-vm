@@ -101,23 +101,15 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case SYS_OPEN:
 			f->R.rax = open(f->R.rdi);
-			// if (f->R.rax == -1)
-			// 	exit(-1);
 			break;
 		case SYS_FILESIZE:
 			f->R.rax = filesize(f->R.rdi);
-			if (f->R.rax == -1)
-				exit(-1);
 			break;
 		case SYS_READ:
 			f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
-			if (f->R.rax == -1)
-				exit(-1);
 			break;
 		case SYS_WRITE:
 			f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
-			if (f->R.rax == -1)
-				exit(-1);
 			break;
 		case SYS_SEEK:
 			seek(f->R.rdi, f->R.rsi);
@@ -153,15 +145,13 @@ void exit(int status) {
 	struct thread *curr = thread_current();
 	curr->exit_status = status;
 	char *save_ptr;
-	char fn_copy[48];
-	memcpy(&fn_copy, curr->name, strlen(curr->name) + 1);
-	strtok_r(fn_copy, " ",&save_ptr);
-	printf("%s: exit(%d)\n",fn_copy,curr->exit_status);
+	
+	strtok_r(curr->name, " ",&save_ptr);
+	printf("%s: exit(%d)\n",curr->name,curr->exit_status);
 	thread_exit();
 }
 
 tid_t fork (const char *thread_name, struct intr_frame *f) {
-	check_address(thread_name);
 	return process_fork(thread_name, f);
 }
 
@@ -252,7 +242,7 @@ filesize (int fd) {
 int
 read (int fd, void *buffer, unsigned size) {
 
-	if (fd == 2 || fd == 1) {
+	if (fd == 1) {
 		return -1;
 	}
 
@@ -302,7 +292,7 @@ read (int fd, void *buffer, unsigned size) {
 int
 write (int fd, const void *buffer, unsigned size) {
 
-	if (fd == 2 || fd == 0) {
+	if (fd == 0) {
 		return -1;
 	}
 
@@ -340,7 +330,7 @@ seek (int fd, unsigned position) {
 	// 블로그에는 file_obj <= 2 라고 되어있는데, 식별자 fd <= 2 경우 아닌가? file_obj는 포인터인데?
 	// 그런데 fd_table[0], fd_table[1], fd_table[2] 안에 Null주소 (0x0)으로 초기화하는 거라면 2보다 작으니 file_obj도 가능할듯.
 	// 아... 찾아보니 이 2기 블로그들은 fd = 1 STDIN, 2 = STDOUT 으로 해놓았다. 그리고 file_obj 역시 파일식별자로 보임.
-	if (fd <= 2) {
+	if (fd <= 1) {
 		return;
 	}
 	
@@ -351,7 +341,7 @@ unsigned
 tell (int fd) {
 	struct file *file_obj = get_file_from_fd_table(fd);
 
-	if (file_obj <= 2) {
+	if (fd <= 1) {
 		return;
 	}
 	

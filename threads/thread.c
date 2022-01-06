@@ -221,11 +221,10 @@ thread_create (const char *name, int priority,
 	t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
 	if (t->fd_table == NULL)
 		return TID_ERROR;
-	t->fd_idx = 3; // 0 : stdin, 1 : stdout, 2 : sterror
+	t->fd_idx = 2; // 0 : stdin, 1 : stdout, 2 : sterror
 	// 2-extra
 	t->fd_table[0] = 1; // dummy values to distinguish fd 0 and 1 from NULL
 	t->fd_table[1] = 2;
-	t->fd_table[2] = 3;
 
 	tid = t->tid = allocate_tid ();
 
@@ -472,6 +471,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	sema_init(&t->fork_sema, 0);
 	sema_init(&t->wait_sema, 0);
 	sema_init(&t->free_sema, 0);
+	t->running = NULL;
 	/* ------------------------------ */
 }
 
@@ -765,7 +765,7 @@ struct thread* get_child_by_tid(tid_t tid){
 	struct thread *child;
 	struct list_elem *e;
 	if (list_empty(&curr->child_list))return NULL;
-	for(e = list_begin(&curr->child_list); list_end(&curr->child_list); e = list_next(e)){
+	for(e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)){
 		child = list_entry(e, struct thread, child_elem);
 		if (child->tid == tid && child->status != THREAD_DYING)return child;
 	}

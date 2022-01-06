@@ -80,7 +80,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	struct thread *curr = thread_current();
 	memcpy(&curr->parent_if, if_, sizeof(struct intr_frame));
 
-	tid_t tid = thread_create(name, curr->priority, __do_fork, thread_current());
+	tid_t tid = thread_create(name, curr->priority, __do_fork, curr);
 	if (tid == TID_ERROR) {
 		return TID_ERROR;
 	}
@@ -214,7 +214,8 @@ __do_fork (void *aux) {
 error:
 	current->exit_status = TID_ERROR;
 	sema_up(&current->fork_sema);
-	thread_exit ();
+	// thread_exit ();
+	exit(TID_ERROR);
 	/* ------------------------------- */
 }
 
@@ -289,13 +290,6 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-#ifdef USERPROG
-	// char *save_ptr;
-	// char fn_copy[48];
-	// memcpy(&fn_copy, curr->name, strlen(curr->name) + 1);
-	// strtok_r(fn_copy, " ",&save_ptr);
-	// printf("%s: exit(%d)\n",fn_copy,curr->exit_status);
-#endif
 
 	for (int i = 0; i < curr->fd_idx; i++)
 	{
