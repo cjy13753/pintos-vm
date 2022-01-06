@@ -268,7 +268,7 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 	struct thread *child = get_child_by_tid(child_tid);
 	
-	if (child_tid == -1 || child == -1){
+	if (child == NULL){
 		return -1;
 	}
 
@@ -297,7 +297,7 @@ process_exit (void) {
 	// printf("%s: exit(%d)\n",fn_copy,curr->exit_status);
 #endif
 
-	for (int i = 0; i < FDCOUNT_LIMIT; i++)
+	for (int i = 0; i < curr->fd_idx; i++)
 	{
 		close(i);
 	}

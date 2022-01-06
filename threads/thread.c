@@ -764,12 +764,12 @@ struct thread* get_child_by_tid(tid_t tid){
 	struct thread *curr = thread_current();
 	struct thread *child;
 	struct list_elem *e;
-	if (list_empty(&curr->child_list))return -1;
+	if (list_empty(&curr->child_list))return NULL;
 	for(e = list_begin(&curr->child_list); list_end(&curr->child_list); e = list_next(e)){
 		child = list_entry(e, struct thread, child_elem);
-		if (child->tid == tid)return child;
+		if (child->tid == tid && child->status != THREAD_DYING)return child;
 	}
-	return -1;
+	return NULL;
 }
 
 /* ------------------- project 2 functions end ------------------------------- */
