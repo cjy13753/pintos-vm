@@ -726,6 +726,10 @@ bool preempt_by_priority(void) {
 	max_ready_thread = list_entry(max_ready_elem, struct thread, elem);
 
 	if (curr_priority < max_ready_thread->priority) {
+		if (intr_context()){
+			intr_yield_on_return();
+			return false;
+		}
 		return true;
 	}
 	else {

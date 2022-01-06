@@ -265,11 +265,6 @@ read (int fd, void *buffer, unsigned size) {
 			if (c == '\0')
 				break;
 		}
-		/* ----- */
-
-		/* try 2 */
-		// *(char *)buffer = input_getc();	
-		/* ----- */
 
 		read_result_size = i;
 	}
@@ -326,11 +321,7 @@ void
 seek (int fd, unsigned position) {
 	struct file *file_obj = get_file_from_fd_table(fd);
 
-	/* STDIN, STDOUT, STDERR = 0, 1, 2 */
-	// 블로그에는 file_obj <= 2 라고 되어있는데, 식별자 fd <= 2 경우 아닌가? file_obj는 포인터인데?
-	// 그런데 fd_table[0], fd_table[1], fd_table[2] 안에 Null주소 (0x0)으로 초기화하는 거라면 2보다 작으니 file_obj도 가능할듯.
-	// 아... 찾아보니 이 2기 블로그들은 fd = 1 STDIN, 2 = STDOUT 으로 해놓았다. 그리고 file_obj 역시 파일식별자로 보임.
-	if (fd <= 1) {
+	if (fd <= 1 || file_obj == NULL) {
 		return;
 	}
 	
@@ -341,7 +332,7 @@ unsigned
 tell (int fd) {
 	struct file *file_obj = get_file_from_fd_table(fd);
 
-	if (fd <= 1) {
+	if (fd <= 1 || file_obj == NULL) {
 		return;
 	}
 	
@@ -363,10 +354,11 @@ void
 close (int fd) {
 	struct file *file_obj = get_file_from_fd_table(fd);
 
-	if (file_obj == NULL) {
+	if (file_obj == NULL || fd<=1) {
 		return;
 	}
 	
 	remove_file_from_fdt(fd);
+	file_close(file_obj);
 }
 /* ------------------------------- */
