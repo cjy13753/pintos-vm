@@ -210,8 +210,6 @@ __do_fork (void *aux) {
 	// child loaded successfully, wake up parent in process_fork
 	sema_up(&current->fork_sema);
 
-	// process_init (); 안함?
-
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret (&if_);
@@ -748,18 +746,19 @@ setup_stack (struct intr_frame *if_) {
 static void argument_pass(struct intr_frame *if_, int argv_cnt, char **argv_list){
 	char *argu_addr[128];
 	int i;
+	// stack에 argv_list 의 인자들을 값 복사 
 	for (int i = argv_cnt-1;i>=0;i--){
 		int argc_len = strlen(argv_list[i]);
 		if_->rsp = if_->rsp - (argc_len+1); 
 		memcpy(if_->rsp, argv_list[i], (argc_len+1));
 		argu_addr[i] = if_->rsp;
 	}
-
+	// put align padding 
 	while (if_->rsp%8!=0){
 		if_->rsp-=1;
 		memset(if_->rsp, 0, sizeof(uint8_t));
 	}
-
+	//nul pointer sentinel와 argu_addr에 저장한 스택의 인자들의 주소를 스택에 쌓는다
 	for (i = argv_cnt; i>=0; i--){
 		if_->rsp = if_->rsp - 8;
 		if (i == argv_cnt){
@@ -768,12 +767,10 @@ static void argument_pass(struct intr_frame *if_, int argv_cnt, char **argv_list
 			memcpy(if_->rsp, &argu_addr[i] , sizeof(char **));
 		}
 	}
-
+	// return 값을 넣어준다 - 사용자 프로세스는 돌아갈 곳이 없음므로 0
 	if_->rsp = if_->rsp - 8;
 	memset(if_->rsp, 0, sizeof(void *));
-
+	//rdi - 인자 개수, rsi - 스택의 인자 주소 시작 위치
 	if_->R.rdi = argv_cnt;
 	if_->R.rsi = if_->rsp + 8;
 }
-
-

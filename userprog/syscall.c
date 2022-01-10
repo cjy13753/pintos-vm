@@ -223,7 +223,6 @@ remove (const char *file) {
 	return filesys_remove(file);
 }
 
-
 int
 open (const char *file) {
 	check_address(file);
@@ -264,7 +263,6 @@ read (int fd, void *buffer, unsigned size) {
 	check_address(buffer);
 
 	int read_result_size;
-	struct thread *curr = thread_current();
 	struct file *file_obj = get_file_from_fd_table(fd);
 
 
