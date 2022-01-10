@@ -216,8 +216,8 @@ thread_create (const char *name, int priority,
 
 	/* Initialize thread. */
 	init_thread (t, name, priority);
-	struct  thread *parent = thread_current();
-	list_push_back(&parent->child_list, &t->child_elem);
+	tid = t->tid = allocate_tid ();
+
 	t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
 	if (t->fd_table == NULL)
 		return TID_ERROR;
@@ -226,7 +226,8 @@ thread_create (const char *name, int priority,
 	t->fd_table[0] = 1; // dummy values to distinguish fd 0 and 1 from NULL
 	t->fd_table[1] = 2;
 
-	tid = t->tid = allocate_tid ();
+	struct  thread *parent = thread_current();
+	list_push_back(&parent->child_list, &t->child_elem);
 
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
@@ -683,7 +684,6 @@ void thread_awake(int64_t ticks){
 	next_tick_to_awake = INT64_MAX;
 	enum intr_level old_level;
 	struct list_elem *e;
-	ASSERT (intr_context ());
 
 	for (e = list_begin (&sleep_list); e != list_end (&sleep_list);) {
 		struct thread* t = list_entry(e, struct thread, elem);
@@ -715,15 +715,18 @@ int64_t get_next_tick_to_awake(void) {
 bool preempt_by_priority(void) {
 	int curr_priority;
 	struct thread *max_ready_thread;
-	struct list_elem *max_ready_elem;
+	struct list_elem *e;
 
 	curr_priority = thread_get_priority();
 
 	if (list_empty(&ready_list))return false; /* !! if ready list is empty, return false directly !!*/
 
-	list_sort(&ready_list, &thread_priority_compare, NULL);
-	max_ready_elem = list_begin(&ready_list);
-	max_ready_thread = list_entry(max_ready_elem, struct thread, elem);
+	/* sort 대신 순회로 최대 값 찾기 */
+	for(e = list_begin(&ready_list); e != list_end(&ready_list); e = list_next(e)){
+		max_ready_thread = list_entry(e, struct thread, elem);
+		if (max_ready_thread->priority>curr_priority)break;
+	}
+	/*------------------------*/
 
 	if (curr_priority < max_ready_thread->priority) {
 		if (intr_context()){

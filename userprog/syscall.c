@@ -136,6 +136,42 @@ check_address (const uint64_t *user_addr) {
 	}
 }
 
+int add_file_to_fdt(struct file *file) {
+	struct thread *curr = thread_current();
+	struct file **fdt = curr->fd_table;
+
+	while (curr->fd_idx < FDCOUNT_LIMIT && fdt[curr->fd_idx]) {
+		curr->fd_idx++;
+	}
+
+	if (curr->fd_idx >= FDCOUNT_LIMIT) {
+		return -1;
+	}
+
+	fdt[curr->fd_idx] = file;
+	return curr->fd_idx;
+}
+
+static struct file *get_file_from_fd_table(int fd) {
+	struct thread *curr = thread_current();
+
+	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
+		return NULL;
+	}
+	return curr->fd_table[fd];
+}
+
+void remove_file_from_fdt(int fd)
+{
+	struct thread *cur = thread_current();
+
+	// Error - invalid fd
+	if (fd < 0 || fd >= FDCOUNT_LIMIT)
+		return;
+
+	cur->fd_table[fd] = NULL;
+}
+
 void 
 halt (void) {
 	power_off();
@@ -187,28 +223,15 @@ remove (const char *file) {
 	return filesys_remove(file);
 }
 
-int add_file_to_fdt(struct file *file) {
-	struct thread *curr = thread_current();
-	struct file **fdt = curr->fd_table;
-
-	while (curr->fd_idx < FDCOUNT_LIMIT && fdt[curr->fd_idx]) {
-		curr->fd_idx++;
-	}
-
-	if (curr->fd_idx >= FDCOUNT_LIMIT) {
-		return -1;
-	}
-
-	fdt[curr->fd_idx] = file;
-	return curr->fd_idx;
-}
 
 int
 open (const char *file) {
 	check_address(file);
+	lock_acquire(&filesys_lock);
 	struct file *open_file = filesys_open(file);
 
 	if (open_file == NULL) {
+		lock_release(&filesys_lock);
 		return -1;
 	}
 	
@@ -217,16 +240,8 @@ open (const char *file) {
 	if (fd == -1) {
 		file_close(open_file);
 	}
+	lock_release(&filesys_lock);
 	return fd;
-}
-
-static struct file *get_file_from_fd_table(int fd) {
-	struct thread *curr = thread_current();
-
-	if (fd < 0 || fd >= FDCOUNT_LIMIT) {
-		return NULL;
-	}
-	return curr->fd_table[fd];
 }
 
 int
@@ -339,22 +354,11 @@ tell (int fd) {
 	return file_tell(file_obj);	
 }
 
-void remove_file_from_fdt(int fd)
-{
-	struct thread *cur = thread_current();
-
-	// Error - invalid fd
-	if (fd < 0 || fd >= FDCOUNT_LIMIT)
-		return;
-
-	cur->fd_table[fd] = NULL;
-}
-
 void
 close (int fd) {
 	struct file *file_obj = get_file_from_fd_table(fd);
 
-	if (file_obj == NULL || fd<=1) {
+	if (fd<=1 || file_obj == NULL) {
 		return;
 	}
 	

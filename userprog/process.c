@@ -27,6 +27,10 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
+/*--------------- project 2 -------------- */
+static void argument_pass(struct intr_frame *if_, int argv_cnt, char **argv_list);
+/*---------------------------------------- */
+
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
@@ -194,7 +198,7 @@ __do_fork (void *aux) {
 		bool found = false;
 		if (!found){
 			struct file *new_file;
-			if (file > 3)
+			if (file > 2)
 				new_file = file_duplicate(file);
 			else
 				new_file = file;
@@ -246,7 +250,6 @@ process_exec (void *f_name) {
 		return -1;
 
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
-
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -416,7 +419,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	int i;
 
 	/* ---------project2 -----------*/
-	// char *file_name_copy[48];
 	char *argv_list[64];
 	char *token, *save_ptr;
 	int argv_cnt = 0;
@@ -519,33 +521,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
 	/* ----------- project2 ---------- */
-	char *argu_addr[128];
-	for (int i = argv_cnt-1;i>=0;i--){
-		int argc_len = strlen(argv_list[i]);
-		if_->rsp = if_->rsp - (argc_len+1); 
-		memcpy(if_->rsp, argv_list[i], (argc_len+1));
-		argu_addr[i] = if_->rsp;
-	}
-
-	while (if_->rsp%8!=0){
-		if_->rsp--;
-		memset(if_->rsp, 0, sizeof(uint8_t));
-	}
-
-	for (i = argv_cnt; i>=0; i--){
-		if_->rsp = if_->rsp - 8;
-		if (i == argv_cnt){
-			memset(if_->rsp, 0, sizeof(char **));
-		}else{
-			memcpy(if_->rsp, &argu_addr[i] , sizeof(char **));
-		}
-	}
-
-	if_->rsp = if_->rsp - 8;
-	memset(if_->rsp, 0, sizeof(void *));
-
-	if_->R.rdi = argv_cnt;
-	if_->R.rsi = if_->rsp + 8;
+	argument_pass(if_, argv_cnt, argv_list);
 	/*---------------------------------*/
 
 	success = true;
@@ -768,3 +744,36 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 #endif /* VM */
+
+static void argument_pass(struct intr_frame *if_, int argv_cnt, char **argv_list){
+	char *argu_addr[128];
+	int i;
+	for (int i = argv_cnt-1;i>=0;i--){
+		int argc_len = strlen(argv_list[i]);
+		if_->rsp = if_->rsp - (argc_len+1); 
+		memcpy(if_->rsp, argv_list[i], (argc_len+1));
+		argu_addr[i] = if_->rsp;
+	}
+
+	while (if_->rsp%8!=0){
+		if_->rsp-=1;
+		memset(if_->rsp, 0, sizeof(uint8_t));
+	}
+
+	for (i = argv_cnt; i>=0; i--){
+		if_->rsp = if_->rsp - 8;
+		if (i == argv_cnt){
+			memset(if_->rsp, 0, sizeof(char **));
+		}else{
+			memcpy(if_->rsp, &argu_addr[i] , sizeof(char **));
+		}
+	}
+
+	if_->rsp = if_->rsp - 8;
+	memset(if_->rsp, 0, sizeof(void *));
+
+	if_->R.rdi = argv_cnt;
+	if_->R.rsi = if_->rsp + 8;
+}
+
+
