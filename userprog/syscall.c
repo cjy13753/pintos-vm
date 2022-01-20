@@ -14,12 +14,14 @@
 #include "kernel/stdio.h"
 #include "threads/palloc.h"
 /* ------------------------------- */
+#include "vm/vm.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
 /* ---------- Project 2 ---------- */
-void check_address(const uint64_t *uaddr);
+struct page *check_address (const uint64_t *user_addr);
+static void check_valid_buffer (void *buffer, unsigned size, bool is_write_call);
 
 void halt (void);			/* 구현 완료 */
 void exit (int status);		/* 구현 완료 */
@@ -128,11 +130,25 @@ syscall_handler (struct intr_frame *f UNUSED) {
 }
 
 /* ---------- Project 2 ---------- */
-void 
-check_address (const uint64_t *user_addr) {
-	struct thread *curr = thread_current();
-	if (user_addr = NULL || !(is_user_vaddr(user_addr)) || pml4_get_page(curr->pml4, user_addr) == NULL) {
+struct page *check_address (const uint64_t *user_addr) {
+	if (user_addr == NULL || is_kernel_vaddr(user_addr)) {
 		exit(-1);
+	} else {
+		struct page *page = spt_find_page(&thread_current()->spt, user_addr);
+		if (page == NULL) {
+			exit(-1);
+		} else {
+			return page;
+		}
+	}
+}
+
+static void check_valid_buffer (void *buffer, unsigned size, bool is_write_call) {
+	for (uint64_t uaddr = (uint64_t)buffer ; uaddr < (uint64_t)buffer + size; uaddr += PGSIZE) {
+		struct page *page = check_address(uaddr);
+		if (is_write_call == true && page->writable == false) {
+			exit(-1);
+		}
 	}
 }
 
@@ -260,7 +276,7 @@ read (int fd, void *buffer, unsigned size) {
 		return -1;
 	}
 
-	check_address(buffer);
+	check_valid_buffer(buffer, size, false);
 
 	int read_result_size;
 	struct file *file_obj = get_file_from_fd_table(fd);
@@ -304,7 +320,7 @@ write (int fd, const void *buffer, unsigned size) {
 		return -1;
 	}
 
-	check_address(buffer);
+	check_valid_buffer(buffer, size, true);
 
 	int write_result_size;
 	struct file *file_obj = get_file_from_fd_table(fd);

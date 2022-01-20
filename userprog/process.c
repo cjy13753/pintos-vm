@@ -64,9 +64,9 @@ process_create_initd (const char *file_name) {
 /* A thread function that launches first user process. */
 static void
 initd (void *f_name) {
-#ifdef VM
-	supplemental_page_table_init (&thread_current ()->spt);
-#endif
+// #ifdef VM
+// 	supplemental_page_table_init (&thread_current ()->spt);
+// #endif
 
 	process_init ();
 
@@ -239,6 +239,10 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+#ifdef VM
+	supplemental_page_table_init(&thread_current()->spt);
+#endif
+
 	/* And then load the binary */
 	success = load (file_name, &_if);
 
@@ -312,7 +316,9 @@ process_cleanup (void) {
 	struct thread *curr = thread_current ();
 
 #ifdef VM
-	supplemental_page_table_kill (&curr->spt);
+	if (!hash_empty(&curr->spt.hash_table)) {
+		supplemental_page_table_kill (&curr->spt);
+	}
 #endif
 
 	uint64_t *pml4;
@@ -684,6 +690,23 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	struct lazy_load_info *lazy_load_info = aux;
+	struct file *file = lazy_load_info->file;
+	off_t ofs = lazy_load_info->ofs;
+	size_t page_read_bytes = lazy_load_info->page_read_bytes;
+	size_t page_zero_bytes = lazy_load_info->page_zero_bytes;
+
+	file_seek(file, ofs);
+	ASSERT(page->frame != NULL);
+	void *kva = page->frame->kva;
+	if (file_read(file, kva, page_read_bytes) != (off_t) page_read_bytes) {
+		free(lazy_load_info);
+		return false;
+	}
+	memset(kva + page_read_bytes, 0, page_zero_bytes);
+	free(lazy_load_info);
+
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -715,15 +738,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct lazy_load_info *aux = malloc(sizeof(struct lazy_load_info));
+		aux->file= file;
+		aux->ofs = ofs;
+		aux->page_read_bytes = page_read_bytes;
+		aux->page_zero_bytes = page_zero_bytes;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+					writable, lazy_load_segment, aux)) {
+			free(aux);
 			return false;
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
@@ -731,7 +761,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 static bool
 setup_stack (struct intr_frame *if_) {
-	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
@@ -739,19 +768,25 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
 
-	return success;
+	if (vm_alloc_page(VM_ANON | VM_MARKER_STACK, stack_bottom, 1)) {
+		if (vm_claim_page(stack_bottom)) {
+			if_->rsp = USER_STACK;
+			return true;
+		}
+	}
+	return false;
 }
 #endif /* VM */
 
 static void argument_pass(struct intr_frame *if_, int argv_cnt, char **argv_list){
-	char *argu_addr[128];
+	// char *argu_addr[128];
 	int i;
 	// stack에 argv_list 의 인자들을 값 복사 
 	for (int i = argv_cnt-1;i>=0;i--){
 		int argc_len = strlen(argv_list[i]);
 		if_->rsp = if_->rsp - (argc_len+1); 
 		memcpy(if_->rsp, argv_list[i], (argc_len+1));
-		argu_addr[i] = if_->rsp;
+		argv_list[i] = if_->rsp;
 	}
 	// put align padding 
 	while (if_->rsp%8!=0){
@@ -764,7 +799,7 @@ static void argument_pass(struct intr_frame *if_, int argv_cnt, char **argv_list
 		if (i == argv_cnt){
 			memset(if_->rsp, 0, sizeof(char **));
 		}else{
-			memcpy(if_->rsp, &argu_addr[i] , sizeof(char **));
+			memcpy(if_->rsp, &argv_list[i] , sizeof(char **));
 		}
 	}
 	// return 값을 넣어준다 - 사용자 프로세스는 돌아갈 곳이 없음므로 0
