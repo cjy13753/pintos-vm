@@ -772,6 +772,7 @@ setup_stack (struct intr_frame *if_) {
 	if (vm_alloc_page(VM_ANON | VM_MARKER_STACK, stack_bottom, 1)) {
 		if (vm_claim_page(stack_bottom)) {
 			if_->rsp = USER_STACK;
+			thread_current()->user_stack_bottom = stack_bottom;
 			return true;
 		}
 	}

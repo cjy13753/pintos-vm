@@ -21,7 +21,7 @@ void syscall_handler (struct intr_frame *);
 
 /* ---------- Project 2 ---------- */
 struct page *check_address (const uint64_t *user_addr);
-static void check_valid_buffer (void *buffer, unsigned size, bool is_write_call);
+static void check_valid_buffer (void *buffer, unsigned size, bool is_write_to_buffer);
 
 void halt (void);			/* 구현 완료 */
 void exit (int status);		/* 구현 완료 */
@@ -75,6 +75,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	// printf ("system call! rax : %d\n", f->R.rax);
 	// thread_exit ();
+
+#ifdef VM
+	thread_current()->user_rsp = f->rsp;
+#endif
 
 	/* ---------- Project 2 ---------- */
 	switch(f->R.rax) {
@@ -143,10 +147,10 @@ struct page *check_address (const uint64_t *user_addr) {
 	}
 }
 
-static void check_valid_buffer (void *buffer, unsigned size, bool is_write_call) {
+static void check_valid_buffer (void *buffer, unsigned size, bool is_write_to_buffer) {
 	for (uint64_t uaddr = (uint64_t)buffer ; uaddr < (uint64_t)buffer + size; uaddr += PGSIZE) {
 		struct page *page = check_address(uaddr);
-		if (is_write_call == true && page->writable == false) {
+		if (is_write_to_buffer == true && page->writable == false) {
 			exit(-1);
 		}
 	}
@@ -276,7 +280,7 @@ read (int fd, void *buffer, unsigned size) {
 		return -1;
 	}
 
-	check_valid_buffer(buffer, size, false);
+	check_valid_buffer(buffer, size, true);
 
 	int read_result_size;
 	struct file *file_obj = get_file_from_fd_table(fd);
@@ -320,7 +324,7 @@ write (int fd, const void *buffer, unsigned size) {
 		return -1;
 	}
 
-	check_valid_buffer(buffer, size, true);
+	check_valid_buffer(buffer, size, false);
 
 	int write_result_size;
 	struct file *file_obj = get_file_from_fd_table(fd);

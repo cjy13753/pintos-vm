@@ -161,8 +161,13 @@ vm_get_frame (void) {
 }
 
 /* Growing the stack. */
-static void
+static bool
 vm_stack_growth (void *addr UNUSED) {
+	bool success = vm_alloc_page(VM_ANON | VM_MARKER_STACK, addr, true); // Create uninit page for stack; will become anon page
+	if (success == true) {
+		thread_current()->user_stack_bottom -= PGSIZE;
+	}
+	return success;
 }
 
 /* Handle the fault on write_protected page */
@@ -178,12 +183,34 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 
-	// TODO: not_present로 충분히 모든 경우를 커버할 수 있는가?
-	if (!not_present) {
+	if (not_present == false) { // when read-only access
 		return false;
 	}
 
-	return vm_claim_page (addr);
+	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+	struct page *page = spt_find_page(spt, addr);
+
+	if (page == NULL) {
+		void *rsp = user ? f->rsp : thread_current()->user_rsp;
+		const int GROWTH_LIMIT = 8;
+		const int STACK_LIMIT = USER_STACK - (1<<20);
+
+		// Check stack size max limit and stack growth request heuristically
+		if(addr >= STACK_LIMIT && USER_STACK > addr && addr >= rsp - GROWTH_LIMIT){
+			void *fpage = thread_current()->user_stack_bottom - PGSIZE;
+			if (vm_stack_growth (fpage)) {
+				page = spt_find_page(spt, fpage);
+				ASSERT(page != NULL);
+			} else {
+				return false;
+			}
+		}
+		else{
+			return false;
+		}
+	}
+	
+	return vm_do_claim_page (page);
 }
 
 /* Free the page.
