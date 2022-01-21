@@ -305,6 +305,7 @@ process_exit (void) {
 	file_close(curr->running);
 
 	process_cleanup ();
+	sema_up(&curr->fork_sema);
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->free_sema);
 

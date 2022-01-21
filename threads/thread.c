@@ -771,7 +771,7 @@ struct thread* get_child_by_tid(tid_t tid){
 	struct thread *curr = thread_current();
 	struct thread *child;
 	struct list_elem *e;
-	if (list_empty(&curr->child_list))return NULL;
+	if (list_empty(&curr->child_list) || tid == TID_ERROR)return NULL;
 	for(e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e)){
 		child = list_entry(e, struct thread, child_elem);
 		if (child->tid == tid && child->status != THREAD_DYING)return child;

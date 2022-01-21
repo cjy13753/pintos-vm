@@ -178,19 +178,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = spt_find_page(spt, addr);
-
-	if (page == NULL) {
-		return false;
-	}
-
 	// TODO: not_present로 충분히 모든 경우를 커버할 수 있는가?
 	if (!not_present) {
 		return false;
 	}
 
-	return vm_do_claim_page (page);
+	return vm_claim_page (addr);
 }
 
 /* Free the page.
@@ -244,6 +237,47 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	struct hash_iterator i;
+	hash_first(&i, &src->hash_table);
+	while (hash_next(&i)) {
+		struct page *parent_page = hash_entry(hash_cur(&i), struct page, hash_elem);
+		enum vm_type type = parent_page->operations->type;
+
+		if(type == VM_UNINIT){
+			struct uninit_page *uninit = &parent_page->uninit;
+			vm_initializer *init = uninit->init;
+			struct lazy_load_info *parent_aux = uninit->aux;
+
+			struct lazy_load_info *child_aux = malloc(sizeof(struct lazy_load_info));
+			if (child_aux == NULL){
+				return false;
+			}
+			memcpy(child_aux, parent_aux, sizeof(struct lazy_load_info));
+
+			if (!vm_alloc_page_with_initializer(uninit->type, parent_page->va, parent_page->writable, init, child_aux)) {
+				return false;
+			}
+		}
+		if(type & VM_ANON == VM_ANON){ // include stack pages
+			if (!vm_alloc_page(type, parent_page->va, parent_page->writable)) {
+				return false;
+			}
+
+			struct page *child_page = spt_find_page(dst, parent_page->va);
+			if (!vm_do_claim_page(child_page)) {
+				return false;
+			}
+
+			ASSERT(parent_page->frame != NULL);
+			memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);
+		}
+		if(type == VM_FILE){
+			//TODO: implement needed
+		}
+		
+	}
+
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */
