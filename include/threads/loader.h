@@ -5,10 +5,10 @@
 #define LOADER_BASE 0x7c00      /* Physical address of loader's base. */
 #define LOADER_END  0x7e00      /* Physical address of end of loader. */
 
-/* Physical address of kernel base. */
+/* Kernel virtual address at which all physical memory is mapped. */
 #define LOADER_KERN_BASE 0x8004000000
 
-/* Kernel virtual address at which all physical memory is mapped. */
+/* Physical address of kernel base. */
 #define LOADER_PHYS_BASE 0x200000
 
 /* Multiboot infos */

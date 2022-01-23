@@ -38,6 +38,8 @@ void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
 /* ------------------------------- */
+void *mmap (void *addr, long long length, int writable, int fd, off_t offset);
+void munmap (void *addr);
 
 /* System call.
  *
@@ -125,6 +127,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case SYS_CLOSE:
 			close(f->R.rdi);
+			break;
+		case SYS_MMAP:
+			f->R.rax = mmap(f->R.rdi,f->R.rsi,f->R.rdx,f->R.r10,f->R.r8);
+			break;
+		case SYS_MUNMAP:
+			munmap(f->R.rdi);
 			break;
 		default:
 			exit(-1);
@@ -384,3 +392,27 @@ close (int fd) {
 	file_close(file_obj);
 }
 /* ------------------------------- */
+
+void *mmap (void *addr, long long length, int writable, int fd, off_t offset){
+	if (pg_ofs(addr) != 0 || addr == NULL || is_kernel_vaddr(addr) || length <= 0){
+		return NULL;
+	}
+	
+	struct file* mapping_file = get_file_from_fd_table(fd);
+	if (fd <= 1 || mapping_file == NULL || file_length(mapping_file) == 0){
+		return NULL;
+	}
+
+	if (offset%PGSIZE != 0){
+		return NULL;
+	}
+
+	return do_mmap(addr, length, writable, mapping_file, offset);
+}
+
+void munmap (void *addr){
+	if (addr == NULL || is_kernel_vaddr(addr)) {
+		exit(-1);
+	}
+	do_munmap(addr);
+}

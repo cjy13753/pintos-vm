@@ -48,5 +48,9 @@ anon_swap_out (struct page *page) {
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void
 anon_destroy (struct page *page) {
-	struct anon_page *anon_page = &page->anon;
+	// struct anon_page *anon_page = &page->anon;
+	struct uninit_page *uninit UNUSED = &page->uninit;
+	struct lazy_load_info *aux = (struct lazy_load_info *)(uninit->aux);
+	
+	free(aux);
 }

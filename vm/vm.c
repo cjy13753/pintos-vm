@@ -111,6 +111,13 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	pml4_clear_page(thread_current()->pml4, page->va);
+	hash_delete(&spt->hash_table, &page->hash_elem);
+
+	if (page->frame != NULL) {
+		page->frame->page == NULL;
+	}
+	
 	vm_dealloc_page (page);
 	return true;
 }
@@ -270,7 +277,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct page *parent_page = hash_entry(hash_cur(&i), struct page, hash_elem);
 		enum vm_type type = parent_page->operations->type;
 
-		if(type == VM_UNINIT){
+		if(type == VM_UNINIT || type == VM_FILE){
 			struct uninit_page *uninit = &parent_page->uninit;
 			vm_initializer *init = uninit->init;
 			struct lazy_load_info *parent_aux = uninit->aux;
@@ -299,7 +306,6 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			memcpy(child_page->frame->kva, parent_page->frame->kva, PGSIZE);
 		}
 		if(type == VM_FILE){
-			//TODO: implement needed
 		}
 		
 	}
@@ -330,6 +336,19 @@ static bool page_less (const struct hash_elem *a, const struct hash_elem *b, voi
 }
 
 static void spt_destructor(struct hash_elem *e, void* aux) {
-    const struct page *p = hash_entry(e, struct page, hash_elem);
-    free(p);
+    const struct page *page = hash_entry(e, struct page, hash_elem);
+	struct thread *t = thread_current();
+	ASSERT(page != NULL);
+
+	if (page_get_type(page) == VM_FILE) {
+		if (pml4_is_dirty(t->pml4, page->va)) {
+			struct lazy_load_info *aux = page->uninit.aux;
+			if (file_write_at(aux->file, page->va, aux->page_read_bytes, aux->ofs) != aux->page_read_bytes) {
+				PANIC("writing back to file during munmap failed.");
+			}
+			pml4_set_dirty(t->pml4, page->va, false);
+		}
+	}
+
+	spt_remove_page(&t->spt, page);
 }
