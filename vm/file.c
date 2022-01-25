@@ -3,6 +3,7 @@
 #include "vm/vm.h"
 #include "threads/vaddr.h"
 #include "userprog/process.h"
+#include "threads/mmu.h"
 
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
@@ -33,13 +34,41 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	struct file_page *file_page UNUSED = &page->file;
+	// struct file_page *file_page UNUSED = &page->file;
+	ASSERT(page != NULL);
+	struct lazy_load_info *aux = page->uninit.aux;
+
+	file_seek(aux->file, aux->ofs);
+
+	if (file_read(aux->file, kva, aux->page_read_bytes) != (off_t)aux->page_read_bytes) {
+		return false;
+	}
+
+	memset(kva + aux->page_read_bytes, 0, aux->page_zero_bytes);
+
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
-	struct file_page *file_page UNUSED = &page->file;
+	// struct file_page *file_page UNUSED = &page->file;
+	ASSERT(page != NULL);
+
+	struct lazy_load_info *aux = page->uninit.aux;
+	struct thread *t = thread_current();
+
+	if (page->writable == true) {
+		if (pml4_is_dirty(t->pml4, page->va)) {
+			if (file_write_at(aux->file, page->va, aux->page_read_bytes, aux->ofs) != aux->page_read_bytes) {
+				return false;
+			}
+			pml4_set_dirty(t->pml4, page->va, false);
+		}
+	}
+	pml4_clear_page(t->pml4, page->va);
+
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -116,12 +145,14 @@ do_munmap (void *addr) {
 	struct file *file = ((struct lazy_load_info *)page->uninit.aux)->file;
 
 	while (page != NULL && page_get_type(page) == VM_FILE) {
-		if (pml4_is_dirty(t->pml4, page->va)) {
-			struct lazy_load_info *aux = page->uninit.aux;
-			if (file_write_at(aux->file, page->va, aux->page_read_bytes, aux->ofs) != aux->page_read_bytes) {
-				PANIC("writing back to file during munmap failed.");
+		if (page->writable == true) {
+			if (pml4_is_dirty(t->pml4, page->va)) {
+				struct lazy_load_info *aux = page->uninit.aux;
+				if (file_write_at(aux->file, page->va, aux->page_read_bytes, aux->ofs) != aux->page_read_bytes) {
+					PANIC("writing back to file during munmap failed.");
+				}
+				pml4_set_dirty(t->pml4, page->va, false);
 			}
-			pml4_set_dirty(t->pml4, page->va, false);
 		}
 		spt_remove_page(&t->spt, page);  // pml4_clear() ?
 		addr += PGSIZE;

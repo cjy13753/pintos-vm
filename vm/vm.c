@@ -4,6 +4,11 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
+
+struct list frame_table;
+struct list_elem *recent_victim_elem;
+struct lock frame_lock;
 
 static uint64_t page_hash (const struct hash_elem *e, void *aux);
 static bool page_less (const struct hash_elem *a, const struct hash_elem *b, void *aux);
@@ -20,7 +25,9 @@ vm_init (void) {
 #endif
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
-	/* TODO: Your code goes here. */
+	list_init(&frame_table);
+	recent_victim_elem = list_begin(&frame_table);
+	lock_init(&frame_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -115,7 +122,7 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 	hash_delete(&spt->hash_table, &page->hash_elem);
 
 	if (page->frame != NULL) {
-		page->frame->page == NULL;
+		page->frame->page = NULL;
 	}
 	
 	vm_dealloc_page (page);
@@ -125,10 +132,42 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
-	struct frame *victim = NULL;
-	 /* TODO: The policy for eviction is up to you. */
+	struct frame *victim_frame;
+	/* TODO: The policy for eviction is up to you. */
+	struct thread *curr = thread_current();
+	struct list_elem *start = recent_victim_elem;
 
-	return victim;
+	for (recent_victim_elem = start;
+		recent_victim_elem != list_end(&frame_table); 
+		recent_victim_elem = list_next(recent_victim_elem)) {
+		
+		victim_frame = list_entry(recent_victim_elem, struct frame, frame_elem);
+		if (victim_frame->page == NULL) {
+			return victim_frame;
+		}
+		if (pml4_is_accessed(curr->pml4, victim_frame->page->va)) {
+			pml4_set_accessed(curr->pml4, victim_frame->page->va, false);
+		} else {
+			return victim_frame;
+		}
+	}
+
+	for (recent_victim_elem = list_begin(&frame_table);
+		recent_victim_elem != start; 
+		recent_victim_elem = list_next(recent_victim_elem)) {
+		
+		victim_frame = list_entry(recent_victim_elem, struct frame, frame_elem);
+		if (victim_frame->page == NULL) {
+			return victim_frame;
+		}
+		if (pml4_is_accessed(curr->pml4, victim_frame->page->va)) {
+			pml4_set_accessed(curr->pml4, victim_frame->page->va, false);
+		} else {
+			return victim_frame;
+		}
+	}
+
+	return victim_frame;
 }
 
 /* Evict one page and return the corresponding frame.
@@ -137,8 +176,16 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
+	ASSERT(victim != NULL);
+	if (victim->page != NULL) {
+		if (swap_out(victim->page) == false) {
+			PANIC("Swap out failed.");
+		}
+	}
 
-	return NULL;
+	// TODO: memset(0)?
+
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -152,7 +199,11 @@ vm_get_frame (void) {
 	void *kva = palloc_get_page(PAL_USER);
 
 	if (kva == NULL) {
-		PANIC ("todo: implement eviction");
+		frame = vm_evict_frame();
+		if (frame->page != NULL) {
+			frame->page->frame = NULL;
+			frame->page = NULL;
+		}
 	}else{
 		frame = malloc(sizeof(struct frame));
 		if (frame == NULL) {
@@ -160,6 +211,7 @@ vm_get_frame (void) {
 		}
 		frame->kva = kva;
 		frame->page = NULL;
+		list_push_back(&frame_table, &frame->frame_elem);
 	}
 
 	ASSERT (frame != NULL);
@@ -243,7 +295,9 @@ vm_claim_page (void *va UNUSED) {
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page) {
+	lock_acquire(&frame_lock);
 	struct frame *frame = vm_get_frame ();
+	lock_release(&frame_lock);
 
 	/* Set links */
 	frame->page = page;
@@ -341,12 +395,14 @@ static void spt_destructor(struct hash_elem *e, void* aux) {
 	ASSERT(page != NULL);
 
 	if (page_get_type(page) == VM_FILE) {
-		if (pml4_is_dirty(t->pml4, page->va)) {
-			struct lazy_load_info *aux = page->uninit.aux;
-			if (file_write_at(aux->file, page->va, aux->page_read_bytes, aux->ofs) != aux->page_read_bytes) {
-				PANIC("writing back to file during munmap failed.");
+		if (page->writable == true) {
+			if (pml4_is_dirty(t->pml4, page->va)) {
+				struct lazy_load_info *aux = page->uninit.aux;
+				if (file_write_at(aux->file, page->va, aux->page_read_bytes, aux->ofs) != aux->page_read_bytes) {
+					PANIC("writing back to file during munmap failed.");
+				}
+				pml4_set_dirty(t->pml4, page->va, false);
 			}
-			pml4_set_dirty(t->pml4, page->va, false);
 		}
 	}
 
