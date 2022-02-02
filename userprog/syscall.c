@@ -313,9 +313,9 @@ read (int fd, void *buffer, unsigned size) {
 			return -1;
 		} 
 		else {
-			lock_acquire(&file_rw_lock);
+			// lock_acquire(&file_rw_lock);
 			read_result_size = file_read(file_obj, buffer, size);
-			lock_release(&file_rw_lock);
+			// lock_release(&file_rw_lock);
 		}
 	}
 
@@ -346,9 +346,9 @@ write (int fd, const void *buffer, unsigned size) {
 			write_result_size = -1;
 		}
 		else {
-			lock_acquire(&file_rw_lock);
+			// lock_acquire(&file_rw_lock);
 			write_result_size = file_write(file_obj, buffer, size);
-			lock_release(&file_rw_lock);
+			// lock_release(&file_rw_lock);
 		}
 	}
 

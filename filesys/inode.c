@@ -236,6 +236,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	const uint8_t *buffer = buffer_;
 	off_t bytes_written = 0;
 	uint8_t *bounce = NULL;
+	bool grow = false;
+	uint8_t *zero = malloc(DISK_SECTOR_SIZE);
 
 	if (inode->deny_write_cnt)
 		return 0;
@@ -243,6 +245,18 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
+
+		#ifdef EFILESYS
+		if (sector_idx == -1) {
+			
+		}
+
+
+
+
+
+		#endif
+
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */

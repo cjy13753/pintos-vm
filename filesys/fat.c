@@ -5,6 +5,7 @@
 #include "threads/synch.h"
 #include <stdio.h>
 #include <string.h>
+#include <bitmap.h>
 
 /* Should be less than DISK_SECTOR_SIZE */
 struct fat_boot {
@@ -20,7 +21,7 @@ struct fat_boot {
 struct fat_fs {
 	struct fat_boot bs;
 	unsigned int *fat;
-	unsigned int fat_length;
+	unsigned int fat_length; /* Number of clusters in the file system */
 	disk_sector_t data_start;
 	cluster_t last_clst;
 	struct lock write_lock;
@@ -30,6 +31,8 @@ static struct fat_fs *fat_fs;
 
 void fat_boot_create (void);
 void fat_fs_init (void);
+
+struct bitmap *fat_bitmap;
 
 void
 fat_init (void) {
@@ -49,6 +52,10 @@ fat_init (void) {
 	if (fat_fs->bs.magic != FAT_MAGIC)
 		fat_boot_create ();
 	fat_fs_init ();
+
+	if ((fat_bitmap = bitmap_create(fat_fs->fat_length)) == NULL) {
+		PANIC ("FAT bitmap creation failed.");
+	}
 }
 
 void
@@ -153,6 +160,10 @@ fat_boot_create (void) {
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
+	ASSERT(SECTORS_PER_CLUSTER == 1);
+
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+	fat_fs->fat_length = sector_to_cluster(disk_size(filesys_disk) - 1);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -165,6 +176,14 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	cluster_t new_clst = get_empty_cluster();
+	if (new_clst != 0) {
+		fat_put(new_clst, EOChain);
+		if (clst != 0) {
+			fat_put(clst, new_clst);
+		}
+	}
+	return new_clst;
 }
 
 /* Remove the chain of clusters starting from CLST.
@@ -172,22 +191,60 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
+	while (clst && clst != EOChain) {
+		bitmap_set(fat_bitmap, clst - 1, false);
+		clst = fat_get(clst);
+	}
+	if (pclst != 0) {
+		fat_put(pclst, EOChain);
+	}
 }
 
 /* Update a value in the FAT table. */
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
+	ASSERT(clst >= 1);
+	if (!bitmap_test(fat_bitmap, clst - 1)) {
+		bitmap_mark(fat_bitmap, clst - 1);
+	}
+	fat_fs->fat[clst - 1] = val;
 }
 
 /* Fetch a value in the FAT table. */
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	ASSERT(clst >= 1);
+
+	if (clst > fat_fs->fat_length || !bitmap_test(fat_bitmap, clst - 1)) {
+		return 0;
+	}
+	return fat_fs->fat[clst - 1];
 }
 
 /* Covert a cluster # to a sector number. */
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	ASSERT(clst >= 1);
+
+	return fat_fs->data_start + (clst - 1) * SECTORS_PER_CLUSTER;
+}
+
+cluster_t
+sector_to_cluster (disk_sector_t sector) {
+	ASSERT(sector >= fat_fs->data_start);
+
+	return (sector - fat_fs->data_start) / SECTORS_PER_CLUSTER + 1;
+}
+
+/* Returns 0 if it fails to find an empty cluster. */
+cluster_t get_empty_cluster(void) {
+	size_t clst = bitmap_scan_and_flip(fat_bitmap, 0, 1, false) + 1;
+	if (clst == BITMAP_ERROR) {
+		return 0;
+	} else {
+		return (cluster_t) clst;
+	}
 }
