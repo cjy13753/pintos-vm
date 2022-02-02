@@ -4,6 +4,8 @@
 struct page;
 enum vm_type;
 
+struct bitmap *swap_table;
+
 struct anon_page {
 };
 

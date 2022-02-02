@@ -3,8 +3,6 @@
 
 void syscall_init (void);
 
-/* -------- project2 ---------- */
-struct lock filesys_lock;   /* proventing race condition against  */
-/* ---------------------------- */
+struct lock file_rw_lock; // prevent simultaneous read, write (race condition prevention?)
 
 #endif /* userprog/syscall.h */

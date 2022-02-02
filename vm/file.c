@@ -56,7 +56,7 @@ file_backed_swap_out (struct page *page) {
 	ASSERT(page != NULL);
 
 	struct lazy_load_info *aux = page->uninit.aux;
-	struct thread *t = thread_current();
+	struct thread *t = page->t;
 
 	if (page->writable == true) {
 		if (pml4_is_dirty(t->pml4, page->va)) {

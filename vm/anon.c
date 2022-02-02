@@ -13,7 +13,6 @@ static bool anon_swap_out (struct page *page);
 static void anon_destroy (struct page *page);
 
 const size_t SECTORS_PER_PAGE = PGSIZE / DISK_SECTOR_SIZE;
-struct bitmap *swap_table;
 
 /* DO NOT MODIFY this struct */
 static const struct page_operations anon_ops = {
@@ -59,6 +58,7 @@ anon_swap_in (struct page *page, void *kva) {
 	}
 
 	bitmap_set(swap_table, page_no, false);
+	uninit_page->swap_index = -1;
 
 	return true;
 }
@@ -75,11 +75,11 @@ anon_swap_out (struct page *page) {
 	}
 
 	for (int i = 0; i < SECTORS_PER_PAGE; ++i) {
-		disk_write(swap_disk, page_no * SECTORS_PER_PAGE + i, page->va + DISK_SECTOR_SIZE * i);
+		disk_write(swap_disk, page_no * SECTORS_PER_PAGE + i, page->frame->kva + DISK_SECTOR_SIZE * i);
 	}
 
 	bitmap_set(swap_table, page_no, true);
-	pml4_clear_page(thread_current()->pml4, page->va);
+	pml4_clear_page(page->t->pml4, page->va);
 
 	uninit_page->swap_index = page_no;
 
